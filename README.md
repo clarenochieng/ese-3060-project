@@ -11,6 +11,7 @@ This file is a lightly optimized variant of Keller Jordan’s `airbench94.py` CI
 used for Part 1 of the project.
 
 **What changed vs the original script**
+
 The baseline version of the script runs in approximately 4.05 seconds per training run. The optimized version, which includes fused SGD, dataloader warmup, and minor hyperparameter refinements, completes training in about 3.99 to 4.00 seconds. This represents a consistent speedup of roughly one to two percent while maintaining identical test time accuracy.
 
 - **Hyperparameters**
