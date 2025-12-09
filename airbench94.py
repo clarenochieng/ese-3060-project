@@ -493,8 +493,8 @@ if __name__ == "__main__":
     print(f'  Min: {all_times.min():.4f}s  |  Max: {all_times.max():.4f}s')
     print('='*60)
 
-    log = {'code': code, 'accs': accs}
-    log_dir = os.path.join('logs', str(uuid.uuid4()))
+    log = {'code': code, 'accs': accs, 'all_times': all_times}
+    log_dir = os.path.join('logs/baseline', str(uuid.uuid4()))
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, 'log.pt')
     print(os.path.abspath(log_path))
