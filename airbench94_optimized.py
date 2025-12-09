@@ -377,7 +377,7 @@ def main(run):
     other_params = [p for k, p in model.named_parameters() if 'norm' not in k and p.requires_grad]
     param_configs = [dict(params=norm_biases, lr=lr_biases, weight_decay=wd/lr_biases),
                      dict(params=other_params, lr=lr, weight_decay=wd/lr)]
-    optimizer = torch.optim.SGD(param_configs, momentum=momentum, nesterov=True)
+    optimizer = torch.optim.SGD(param_configs, momentum=momentum, nesterov=True, fused=True)
 
     def get_lr(step):
         warmup_steps = int(total_train_steps * 0.23)
@@ -406,6 +406,11 @@ def main(run):
     torch.cuda.synchronize()
     total_time_seconds += 1e-3 * starter.elapsed_time(ender)
 
+    warmup_iter = iter(train_loader)
+    _ = next(warmup_iter)
+    del warmup_iter
+    train_loader.epoch = 0
+
     for epoch in range(ceil(epochs)):
 
         model[0].bias.requires_grad = (epoch < hyp['opt']['whiten_bias_epochs'])
@@ -421,9 +426,9 @@ def main(run):
 
             outputs = model(inputs)
             loss = loss_fn(outputs, labels).sum()
-            optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
             scheduler.step()
 
             current_steps += 1
@@ -464,16 +469,33 @@ def main(run):
     epoch = 'eval'
     print_training_details(locals(), is_final_entry=True)
 
-    return tta_val_acc
+    return tta_val_acc, total_time_seconds
 
 if __name__ == "__main__":
+    torch.cuda.empty_cache()
+    
     with open(sys.argv[0]) as f:
         code = f.read()
 
     print_columns(logging_columns_list, is_head=True)
-    #main('warmup')
-    accs = torch.tensor([main(run) for run in range(25)])
-    print('Mean: %.4f    Std: %.4f' % (accs.mean(), accs.std()))
+    
+    all_times = []
+    accs = []
+    for run in range(25):
+        acc, time_taken = main(run)
+        accs.append(acc)
+        if run > 0:  # Skip first run for timing statistics
+            all_times.append(time_taken)
+    accs = torch.tensor(accs)
+    all_times = torch.tensor(all_times)
+    print('\n' + '='*60)
+    print('FINAL RESULTS')
+    print('='*60)
+    print(f'Accuracy:      {accs.mean():.4f} ± {accs.std():.4f}')
+    print(f'  Min: {accs.min():.4f}  |  Max: {accs.max():.4f}')
+    print(f'Training Time: {all_times.mean():.4f}s ± {all_times.std():.4f}s (excluding first run)')
+    print(f'  Min: {all_times.min():.4f}s  |  Max: {all_times.max():.4f}s')
+    print('='*60)
 
     log = {'code': code, 'accs': accs}
     log_dir = os.path.join('logs', str(uuid.uuid4()))
